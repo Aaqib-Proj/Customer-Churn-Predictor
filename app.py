@@ -256,7 +256,7 @@ if 'preset' not in st.session_state:
     st.session_state.support_calls = 1
     st.session_state.age = 32
     st.session_state.gender = "Female"
-    st.session_state.monthly_fee = 14.99
+    st.session_state.monthly_fee = 499.0
 
 def apply_ott_preset(name):
     if name == "dropout":  # High risk: complaints, high dormancy, disengagement
@@ -272,7 +272,7 @@ def apply_ott_preset(name):
         st.session_state.support_calls = 5
         st.session_state.age = 26
         st.session_state.gender = "Female"
-        st.session_state.monthly_fee = 14.99
+        st.session_state.monthly_fee = 499.0
     elif name == "binge":  # Safe & Loyal: low complaints, steady engagement
         st.session_state.days_subscribed = 380
         st.session_state.multi_screen = "Yes"
@@ -286,7 +286,7 @@ def apply_ott_preset(name):
         st.session_state.support_calls = 1
         st.session_state.age = 35
         st.session_state.gender = "Male"
-        st.session_state.monthly_fee = 19.99
+        st.session_state.monthly_fee = 649.0
     elif name == "casual":  # Moderate: occasional watching, mild friction
         st.session_state.days_subscribed = 90
         st.session_state.multi_screen = "No"
@@ -300,7 +300,7 @@ def apply_ott_preset(name):
         st.session_state.support_calls = 3
         st.session_state.age = 29
         st.session_state.gender = "Female"
-        st.session_state.monthly_fee = 14.99
+        st.session_state.monthly_fee = 299.0
 
 # -----------------------------------------------------------------------------
 # 6. HEADER & QUICK PRESET BUTTONS
@@ -366,9 +366,9 @@ with col_inputs:
 
     with c2:
         monthly_fee = st.number_input(
-            "Monthly Subscription Price ($)",
-            min_value=4.99, max_value=35.0, value=float(st.session_state.monthly_fee), step=1.0,
-            help="Current monthly recurring price tier (e.g. $14.99 Standard, $19.99 Premium 4K)"
+            "Monthly Subscription Price (₹)",
+            min_value=99.0, max_value=2500.0, value=float(st.session_state.monthly_fee), step=50.0,
+            help="Current monthly recurring price tier (e.g. ₹199 Mobile, ₹499 Standard, ₹649 Premium 4K)"
         )
         mail_subscribed = st.selectbox(
             "Subscribed to Newsletter / Push Promotions",
@@ -507,11 +507,11 @@ with col_results:
     <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem; margin-bottom: 1.25rem;">
         <div class="stat-pill">
             <div class="stat-pill-label">Subscription Tier</div>
-            <div class="stat-pill-value">${monthly_fee:.2f}<span style="font-size:0.85rem; font-weight:500; color:#94a3b8;">/mo</span></div>
+            <div class="stat-pill-value">₹{monthly_fee:,.0f}<span style="font-size:0.85rem; font-weight:500; color:#94a3b8;">/mo</span></div>
         </div>
         <div class="stat-pill">
             <div class="stat-pill-label">Annual Value (ARR)</div>
-            <div class="stat-pill-value">${annual_streaming_arr:,.2f}</div>
+            <div class="stat-pill-value">₹{annual_streaming_arr:,.0f}</div>
         </div>
     </div>
     """, unsafe_allow_html=True)
@@ -569,7 +569,7 @@ with col_results:
         reduction = max(2.0, churn_risk_pct - new_p)
         actions.append((
             "Priority Support Outreach & Goodwill Credit",
-            "Resolve streaming complaints and offer a one-time $5 credit to rebuild satisfaction.",
+            "Resolve streaming complaints and offer a one-time ₹150 credit to rebuild satisfaction.",
             f"-{reduction:.0f}% risk"
         ))
 
@@ -623,8 +623,8 @@ with col_results:
             "1. EXECUTIVE SUBSCRIBER RISK SUMMARY",
             "Metric,Subscriber Metric,Assessment",
             f"Predicted Churn Probability,{churn_risk_pct:.1f}%,{risk_title}",
-            f"Monthly Subscription Fee,${monthly_fee:.2f},Active Tier",
-            f"Annual Revenue at Risk (ARR),${annual_streaming_arr:,.2f},Exposure",
+            f"Monthly Subscription Fee,₹{monthly_fee:,.0f},Active Tier",
+            f"Annual Revenue at Risk (ARR),₹{annual_streaming_arr:,.0f},Exposure",
             f"Tenure with Platform,{days_subscribed} Days,Account Age",
             "",
             "2. STREAMING BEHAVIOR & ENGAGEMENT",
@@ -698,8 +698,8 @@ with col_results:
         </div>
         <div class="kpi-grid">
             <div class="kpi-box"><div style="font-size:11px; font-weight:700; color:#64748b; text-transform:uppercase;">Predicted Churn Risk</div><div style="font-size:28px; font-weight:800; color:#0f172a;">{churn_risk_pct:.1f}%</div></div>
-            <div class="kpi-box"><div style="font-size:11px; font-weight:700; color:#64748b; text-transform:uppercase;">Monthly Subscription</div><div style="font-size:28px; font-weight:800; color:#0f172a;">${monthly_fee:.2f}</div></div>
-            <div class="kpi-box"><div style="font-size:11px; font-weight:700; color:#64748b; text-transform:uppercase;">Annual Revenue at Risk</div><div style="font-size:28px; font-weight:800; color:#0f172a;">${annual_streaming_arr:,.2f}</div></div>
+            <div class="kpi-box"><div style="font-size:11px; font-weight:700; color:#64748b; text-transform:uppercase;">Monthly Subscription</div><div style="font-size:28px; font-weight:800; color:#0f172a;">₹{monthly_fee:,.0f}</div></div>
+            <div class="kpi-box"><div style="font-size:11px; font-weight:700; color:#64748b; text-transform:uppercase;">Annual Revenue at Risk</div><div style="font-size:28px; font-weight:800; color:#0f172a;">₹{annual_streaming_arr:,.0f}</div></div>
         </div>
         <div class="section-title">Streaming &amp; Behavioral Profile</div>
         <table>
