@@ -11,8 +11,8 @@ warnings.filterwarnings('ignore')
 # 1. PAGE SETUP
 # -----------------------------------------------------------------------------
 st.set_page_config(
-    page_title="Customer Churn Risk Analyzer",
-    page_icon="👥",
+    page_title="StreamPulse™ | OTT Subscriber Churn Analyzer",
+    page_icon="🎬",
     layout="wide",
     initial_sidebar_state="collapsed"
 )
@@ -28,7 +28,7 @@ st.markdown("""
         font-family: 'Plus Jakarta Sans', 'Inter', -apple-system, sans-serif;
     }
 
-    /* Main Section Headers - Vibrant Sky Blue for 100% Visibility */
+    /* Main Section Headers - Vibrant Sky Blue for 100% Visibility in Dark & Light Modes */
     .card-title {
         font-size: 1.05rem;
         font-weight: 700;
@@ -202,207 +202,105 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # -----------------------------------------------------------------------------
-# 3. LOAD ASSETS
+# 3. LOAD OTT ASSETS
 # -----------------------------------------------------------------------------
 @st.cache_resource(show_spinner=False)
-def load_model_assets():
-    rf = joblib.load('churn_rf_model.pkl')
-    sc = joblib.load('scaler.pkl')
-    cols = joblib.load('model_columns.pkl')
+def load_ott_assets():
+    rf = joblib.load('ott_rf_model.pkl')
+    sc = joblib.load('ott_scaler.pkl')
+    cols = joblib.load('ott_columns.pkl')
     return rf, sc, cols
 
 try:
-    model, scaler, model_columns = load_model_assets()
+    model, scaler, model_columns = load_ott_assets()
 except Exception as e:
-    st.error(f"Unable to load prediction model: {e}")
+    st.error(f"Unable to load OTT prediction model: {e}")
     st.stop()
 
 # -----------------------------------------------------------------------------
 # 4. PREDICTION FUNCTION
 # -----------------------------------------------------------------------------
-def compute_churn_risk(data):
+def compute_ott_churn(data):
     df = pd.DataFrame([data])
     
-    # Feature Engineering
-    df['MonthlyCharges_per_Tenure'] = df['MonthlyCharges'] / (df['tenure'] + 1)
+    # Preprocessing
+    df['multi_screen'] = 1 if str(df['multi_screen'].iloc[0]).lower() in ['yes', '1'] else 0
+    df['mail_subscribed'] = 1 if str(df['mail_subscribed'].iloc[0]).lower() in ['yes', '1'] else 0
+    df['daily_avg_mins'] = df['weekly_mins_watched'] / 7.0
+    df['mins_per_video'] = df['weekly_mins_watched'] / (df['videos_watched'] + 1)
+    df['gender_Male'] = 1 if df['gender'].iloc[0] == 'Male' else 0
+    df['gender_Unknown'] = 1 if df['gender'].iloc[0] == 'Unknown' else 0
     
-    def get_tenure_group(m):
-        if m <= 12: return '0-1 Year'
-        elif m <= 24: return '1-2 Years'
-        elif m <= 48: return '2-4 Years'
-        else: return '4+ Years'
-    df['Tenure_Group'] = df['tenure'].apply(get_tenure_group)
-    
-    # Binary Encodings
-    binary_cols = ['gender', 'Partner', 'Dependents', 'PhoneService', 'PaperlessBilling']
-    for col in binary_cols:
-        df[col] = df[col].apply(lambda x: 1 if x in ['Yes', 'Male', 1] else 0)
-    df['SeniorCitizen'] = int(df['SeniorCitizen'].iloc[0])
-    
-    # One-hot encoding and column matching
-    df = pd.get_dummies(df)
+    # Reindex & scale
     df = df.reindex(columns=model_columns, fill_value=0)
+    scaled = scaler.transform(df)
     
-    # Standardize numerical features
-    num_cols = ['tenure', 'MonthlyCharges', 'TotalCharges', 'MonthlyCharges_per_Tenure']
-    df[num_cols] = scaler.transform(df[num_cols])
-    
-    # Prediction
-    prob = model.predict_proba(df)[0][1] * 100.0
+    # Inference
+    prob = model.predict_proba(scaled)[0][1] * 100.0
     return float(prob)
 
 # -----------------------------------------------------------------------------
-# 5. REPORT GENERATION ENGINES (EXCEL & HTML)
+# 5. PRESETS MANAGEMENT (OTT Archetypes)
 # -----------------------------------------------------------------------------
-def generate_excel_csv_report(account_data, risk_score, risk_title, reasons, actions, annual_arr):
-    """
-    Generates a structured, multi-section CSV report that opens cleanly in Excel
-    without clipped columns, truncated headers, or ### date errors.
-    """
-    lines = [
-        "CUSTOMER CHURN RISK & RETENTION ASSESSMENT REPORT",
-        f"Generated Date,'{datetime.now().strftime('%Y-%m-%d %H:%M:%S UTC')}",
-        "Assessment Engine,Random Forest Production Classifier",
-        "",
-        "1. EXECUTIVE RISK ASSESSMENT",
-        "Metric,Customer Value,Assessment Summary",
-        f"Predicted Churn Probability,{risk_score:.1f}%,{risk_title}",
-        f"Monthly Recurring Bill,${account_data['MonthlyCharges']:.2f},Active Monthly Run-Rate",
-        f"Annual Revenue at Risk (ARR),${annual_arr:,.2f},Financial Exposure if Cancelled",
-        f"Customer Tenancy,{account_data['tenure']} Months,Account Age",
-        "",
-        "2. ACCOUNT & SERVICE CONFIGURATION",
-        "Account Feature,Current Value",
-        f"Contract Type,{account_data['Contract']}",
-        f"Payment Method,{account_data['PaymentMethod']}",
-        f"Paperless Invoicing,{account_data['PaperlessBilling']}",
-        f"Internet Service Tier,{account_data['InternetService']}",
-        f"Tech Support Included,{account_data['TechSupport']}",
-        f"Cyber Security Attached,{account_data['OnlineSecurity']}",
-        f"Automated Cloud Backup,{account_data['OnlineBackup']}",
-        f"Device Protection,{account_data['DeviceProtection']}",
-        f"Telephony Service,{account_data['PhoneService']}",
-        f"Multiple Lines,{account_data['MultipleLines']}",
-        f"Cumulative Invoiced to Date,${account_data['TotalCharges']:.2f}",
-        "",
-        "3. IDENTIFIED RISK DRIVERS (WHY THIS SCORE?)",
-        "Status,Factor Attribution,Description",
-    ]
-    
-    for icon, text in reasons:
-        clean_text = text.replace('<strong>', '').replace('</strong>', '')
-        indicator = "Adverse (Risk Factor)" if "❌" in icon else ("Favorable (Retention Anchor)" if "✅" in icon else "Attention Area")
-        lines.append(f"{indicator},Account Signal,\"{clean_text}\"")
-        
-    lines.extend([
-        "",
-        "4. RECOMMENDED RETENTION ACTION PLAN",
-        "Recommended Intervention,Implementation Details,Projected Churn Reduction"
-    ])
-    
-    for title, desc, benefit in actions:
-        lines.append(f"\"{title}\",\"{desc}\",\"{benefit}\"")
-        
-    return "\n".join(lines)
+if 'preset' not in st.session_state:
+    st.session_state.preset = "Custom"
+    st.session_state.days_subscribed = 120
+    st.session_state.multi_screen = "No"
+    st.session_state.mail_subscribed = "Yes"
+    st.session_state.weekly_mins = 260
+    st.session_state.videos = 5
+    st.session_state.min_daily_mins = 15.0
+    st.session_state.max_daily_mins = 60.0
+    st.session_state.night_mins = 45
+    st.session_state.inactive_days = 3.0
+    st.session_state.support_calls = 1
+    st.session_state.age = 32
+    st.session_state.gender = "Female"
+    st.session_state.monthly_fee = 14.99
 
-def generate_html_dossier_report(account_data, risk_score, risk_title, reasons, actions, annual_arr):
-    """
-    Generates an executive-grade, printable HTML document with clean styling,
-    ready to save, open in browser, or print to PDF.
-    """
-    badge_bg = "#dc2626" if "HIGH" in risk_title else ("#d97706" if "MODERATE" in risk_title else "#059669")
-    
-    drivers_html = "".join([
-        f"""<tr>
-            <td style='padding:8px 12px; border-bottom:1px solid #e2e8f0; font-weight:600;'>{icon}</td>
-            <td style='padding:8px 12px; border-bottom:1px solid #e2e8f0;'>{text}</td>
-        </tr>""" for icon, text in reasons
-    ])
-    
-    actions_html = "".join([
-        f"""<div style='background:#f8fafc; border-left:4px solid #2563eb; padding:12px 16px; margin-bottom:10px; border-radius:4px;'>
-            <div style='display:flex; justify-content:space-between; font-weight:700; color:#0f172a;'>
-                <span>{title}</span>
-                <span style='color:#059669; font-weight:700;'>{benefit}</span>
-            </div>
-            <div style='font-size:13px; color:#64748b; margin-top:4px;'>{desc}</div>
-        </div>""" for title, desc, benefit in actions
-    ])
-
-    html_content = f"""<!DOCTYPE html>
-<html>
-<head>
-    <meta charset="utf-8">
-    <title>Customer Churn Risk Report</title>
-    <style>
-        body {{ font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; margin: 30px auto; max-width: 850px; color: #1e293b; background: #f8fafc; }}
-        .card {{ background: #ffffff; border: 1px solid #e2e8f0; border-radius: 12px; padding: 32px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05); }}
-        .header {{ border-bottom: 2px solid #2563eb; padding-bottom: 16px; margin-bottom: 24px; display: flex; justify-content: space-between; align-items: flex-end; }}
-        .title {{ font-size: 24px; font-weight: 800; color: #0f172a; margin: 0; }}
-        .subtitle {{ font-size: 13px; color: #64748b; margin-top: 4px; }}
-        .kpi-grid {{ display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-bottom: 24px; }}
-        .kpi-box {{ background: #f8fafc; border-radius: 8px; padding: 16px; border: 1px solid #e2e8f0; text-align: center; }}
-        .kpi-label {{ font-size: 11px; font-weight: 700; color: #64748b; text-transform: uppercase; letter-spacing: 0.05em; }}
-        .kpi-value {{ font-size: 28px; font-weight: 800; color: #0f172a; margin-top: 4px; }}
-        .badge {{ display: inline-block; padding: 4px 12px; border-radius: 9999px; font-size: 12px; font-weight: 700; color: #ffffff; background: {badge_bg}; }}
-        .section-title {{ font-size: 16px; font-weight: 700; color: #0f172a; border-bottom: 1px solid #e2e8f0; padding-bottom: 8px; margin-top: 24px; margin-bottom: 12px; }}
-        table {{ width: 100%; border-collapse: collapse; font-size: 14px; margin-bottom: 16px; }}
-        th {{ text-align: left; background: #f1f5f9; padding: 8px 12px; border-bottom: 1px solid #cbd5e1; font-weight: 600; color: #475569; }}
-        td {{ padding: 8px 12px; border-bottom: 1px solid #f1f5f9; color: #334155; }}
-        @media print {{ body {{ background: #ffffff; margin: 0; }} .card {{ border: none; box-shadow: none; padding: 0; }} }}
-    </style>
-</head>
-<body>
-    <div class="card">
-        <div class="header">
-            <div>
-                <h1 class="title">Customer Churn Risk Report</h1>
-                <div class="subtitle">Executive Retention Dossier & Action Playbook &bull; Date: {datetime.now().strftime('%B %d, %Y')}</div>
-            </div>
-            <div>
-                <span class="badge">{risk_title}</span>
-            </div>
-        </div>
-
-        <div class="kpi-grid">
-            <div class="kpi-box">
-                <div class="kpi-label">Predicted Churn Risk</div>
-                <div class="kpi-value">{risk_score:.1f}%</div>
-            </div>
-            <div class="kpi-box">
-                <div class="kpi-label">Monthly Bill</div>
-                <div class="kpi-value">${account_data['MonthlyCharges']:.2f}</div>
-            </div>
-            <div class="kpi-box">
-                <div class="kpi-label">Annual Revenue at Risk</div>
-                <div class="kpi-value">${annual_arr:,.2f}</div>
-            </div>
-        </div>
-
-        <div class="section-title">Account &amp; Service Profile</div>
-        <table>
-            <tr><th>Contract Term</th><td>{account_data['Contract']}</td><th>Account Tenancy</th><td>{account_data['tenure']} Months</td></tr>
-            <tr><th>Payment Method</th><td>{account_data['PaymentMethod']}</td><th>Paperless Invoicing</th><td>{account_data['PaperlessBilling']}</td></tr>
-            <tr><th>Internet Service</th><td>{account_data['InternetService']}</td><th>Tech Support</th><td>{account_data['TechSupport']}</td></tr>
-            <tr><th>Online Security</th><td>{account_data['OnlineSecurity']}</td><th>Cloud Backup</th><td>{account_data['OnlineBackup']}</td></tr>
-        </table>
-
-        <div class="section-title">Key Risk Drivers</div>
-        <table>
-            {drivers_html}
-        </table>
-
-        <div class="section-title">Recommended Retention Actions</div>
-        {actions_html}
-
-        <div style="margin-top: 30px; padding-top: 15px; border-top: 1px solid #e2e8f0; font-size: 11px; color: #94a3b8; display: flex; justify-content: space-between;">
-            <span>Generated by RetainOps Customer Risk Engine</span>
-            <span>Confidential &bull; For Internal Retention Operations</span>
-        </div>
-    </div>
-</body>
-</html>"""
-    return html_content
+def apply_ott_preset(name):
+    if name == "dropout":  # High risk: complaints, high dormancy, disengagement
+        st.session_state.days_subscribed = 35
+        st.session_state.multi_screen = "No"
+        st.session_state.mail_subscribed = "No"
+        st.session_state.weekly_mins = 340
+        st.session_state.videos = 2
+        st.session_state.min_daily_mins = 5.0
+        st.session_state.max_daily_mins = 55.0
+        st.session_state.night_mins = 30
+        st.session_state.inactive_days = 12.0
+        st.session_state.support_calls = 5
+        st.session_state.age = 26
+        st.session_state.gender = "Female"
+        st.session_state.monthly_fee = 14.99
+    elif name == "binge":  # Safe & Loyal: low complaints, steady engagement
+        st.session_state.days_subscribed = 380
+        st.session_state.multi_screen = "Yes"
+        st.session_state.mail_subscribed = "Yes"
+        st.session_state.weekly_mins = 220
+        st.session_state.videos = 7
+        st.session_state.min_daily_mins = 18.0
+        st.session_state.max_daily_mins = 40.0
+        st.session_state.night_mins = 75
+        st.session_state.inactive_days = 1.0
+        st.session_state.support_calls = 1
+        st.session_state.age = 35
+        st.session_state.gender = "Male"
+        st.session_state.monthly_fee = 19.99
+    elif name == "casual":  # Moderate: occasional watching, mild friction
+        st.session_state.days_subscribed = 90
+        st.session_state.multi_screen = "No"
+        st.session_state.mail_subscribed = "Yes"
+        st.session_state.weekly_mins = 180
+        st.session_state.videos = 3
+        st.session_state.min_daily_mins = 10.0
+        st.session_state.max_daily_mins = 45.0
+        st.session_state.night_mins = 40
+        st.session_state.inactive_days = 6.0
+        st.session_state.support_calls = 3
+        st.session_state.age = 29
+        st.session_state.gender = "Female"
+        st.session_state.monthly_fee = 14.99
 
 # -----------------------------------------------------------------------------
 # 6. HEADER & QUICK PRESET BUTTONS
@@ -410,195 +308,193 @@ def generate_html_dossier_report(account_data, risk_score, risk_title, reasons, 
 st.markdown("""
 <div style="margin-bottom: 1.25rem;">
     <h1 style="font-size: 1.75rem; font-weight: 800; color: #ffffff !important; margin: 0; letter-spacing: -0.02em;">
-        Customer Churn Risk Analyzer
+        🎬 StreamPulse™ | OTT Subscriber Churn Analyzer
     </h1>
     <p style="font-size: 0.95rem; color: #94a3b8 !important; margin: 0.35rem 0 0 0;">
-        Assess whether a customer is at risk of canceling their subscription, understand key causes, and review retention recommendations.
+        Predict subscriber cancellation risk for streaming services (Netflix, Prime, Disney+), detect viewer disengagement, and trigger automated retention offers.
     </p>
 </div>
 """, unsafe_allow_html=True)
 
-# Preset Bar: 3 Simple One-Click Buttons
+# Preset Bar: 3 Immediate Streaming Archetype Buttons
 p_col1, p_col2, p_col3, p_col4 = st.columns([1.2, 1.2, 1.2, 2.4])
 with p_col1:
-    if st.button("🚨 Load High Risk Example", use_container_width=True, help="Load a customer archetype likely to cancel"):
-        apply_preset("high_risk")
+    if st.button("🚨 Load Binge Dropout (High Risk)", use_container_width=True, help="Load an inactive subscriber with unresolved support tickets"):
+        apply_ott_preset("dropout")
         st.rerun()
 with p_col2:
-    if st.button("✅ Load Safe Example", use_container_width=True, help="Load a long-term loyal customer"):
-        apply_preset("loyal")
+    if st.button("🍿 Load Loyal Viewer (Safe)", use_container_width=True, help="Load a long-term engaged subscriber"):
+        apply_ott_preset("binge")
         st.rerun()
 with p_col3:
-    if st.button("⚖️ Load Moderate Example", use_container_width=True, help="Load a mid-tenure average account"):
-        apply_preset("average")
+    if st.button("📱 Load Casual Viewer (Moderate)", use_container_width=True, help="Load an average casual viewer with occasional inactivity"):
+        apply_ott_preset("casual")
         st.rerun()
 
 st.markdown("<div style='height: 0.75rem;'></div>", unsafe_allow_html=True)
 
 # -----------------------------------------------------------------------------
-# 7. MAIN TWO-COLUMN LAYOUT: SIMPLE, DIRECT, INTUITIVE
+# 7. MAIN TWO-COLUMN LAYOUT
 # -----------------------------------------------------------------------------
-col_inputs, col_results = st.columns([1.2, 1.0], gap="large")
+col_inputs, col_results = st.columns([1.25, 1.0], gap="large")
 
 # -----------------------------
 # LEFT COLUMN: INPUT PARAMETERS
 # -----------------------------
 with col_inputs:
-    # 1. Customer & Contract
+    # 1. Subscriber Plan & Account
     st.markdown("""
         <div class="card-title">
-            <span>📋 Customer & Contract Details</span>
+            <span>📺 Subscription & Plan Details</span>
         </div>
     """, unsafe_allow_html=True)
     
     c1, c2 = st.columns(2)
     with c1:
-        tenure = st.slider(
-            "Account Age (Months with company)",
-            min_value=0, max_value=72, value=int(st.session_state.tenure),
-            help="How long this customer has maintained an active account"
+        days_subscribed = st.slider(
+            "Account Age (Days Subscribed)",
+            min_value=1, max_value=800, value=int(st.session_state.days_subscribed),
+            help="Total consecutive days this user has held an active subscription"
         )
-        contract = st.selectbox(
-            "Contract Term",
-            ["Month-to-month", "One year", "Two year"],
-            index=["Month-to-month", "One year", "Two year"].index(st.session_state.contract)
+        multi_screen = st.selectbox(
+            "Plan Type / Multi-Screen Access",
+            ["Single Screen", "Multi-Screen (Family / Premium)"],
+            index=0 if st.session_state.multi_screen == "No" else 1,
+            help="Single-screen basic plan vs multi-screen family streaming tier"
         )
-        payment_method = st.selectbox(
-            "Payment Method",
-            ["Electronic check", "Mailed check", "Bank transfer (automatic)", "Credit card (automatic)"],
-            index=["Electronic check", "Mailed check", "Bank transfer (automatic)", "Credit card (automatic)"].index(st.session_state.payment)
-        )
+        multi_screen_val = "yes" if "Multi-Screen" in multi_screen else "no"
 
     with c2:
-        monthly_charges = st.number_input(
-            "Monthly Bill Amount ($)",
-            min_value=15.0, max_value=200.0, value=float(st.session_state.monthly), step=5.0
+        monthly_fee = st.number_input(
+            "Monthly Subscription Price ($)",
+            min_value=4.99, max_value=35.0, value=float(st.session_state.monthly_fee), step=1.0,
+            help="Current monthly recurring price tier (e.g. $14.99 Standard, $19.99 Premium 4K)"
         )
-        total_charges = st.number_input(
-            "Total Invoiced to Date ($)",
-            min_value=0.0, max_value=10000.0, value=float(st.session_state.total), step=50.0
-        )
-        paperless = st.selectbox(
-            "Paperless Invoicing",
+        mail_subscribed = st.selectbox(
+            "Subscribed to Newsletter / Push Promotions",
             ["Yes", "No"],
-            index=0 if st.session_state.paperless == "Yes" else 1
+            index=0 if st.session_state.mail_subscribed == "Yes" else 1,
+            help="Whether the subscriber opens content recommendations and promo emails"
+        )
+        mail_subscribed_val = "yes" if mail_subscribed == "Yes" else "no"
+
+    st.markdown("<div style='height: 0.5rem;'></div>", unsafe_allow_html=True)
+
+    # 2. Viewing & Streaming Engagement
+    st.markdown("""
+        <div class="card-title">
+            <span>🎥 Viewing & Streaming Activity</span>
+        </div>
+    """, unsafe_allow_html=True)
+    
+    v1, v2 = st.columns(2)
+    with v1:
+        weekly_mins = st.slider(
+            "Weekly Watch Time (Minutes)",
+            min_value=0, max_value=800, value=int(st.session_state.weekly_mins), step=10,
+            help=f"Weekly stream time. Current: {st.session_state.weekly_mins} mins (~{st.session_state.weekly_mins/60:.1f} hrs/week)"
+        )
+        videos_watched = st.slider(
+            "Shows / Movies Watched (Weekly)",
+            min_value=0, max_value=25, value=int(st.session_state.videos),
+            help="Count of individual episodes or full movies streamed this week"
+        )
+        night_mins = st.slider(
+            "Night-Time Streaming (Peak Mins)",
+            min_value=0, max_value=150, value=int(st.session_state.night_mins), step=5,
+            help="Minutes watched between 10 PM and 4 AM"
+        )
+
+    with v2:
+        max_daily_mins = st.slider(
+            "Peak Single-Day Viewing (Mins)",
+            min_value=0.0, max_value=150.0, value=float(st.session_state.max_daily_mins), step=5.0,
+            help="Maximum minutes watched on a heavy binge day"
+        )
+        min_daily_mins = st.slider(
+            "Lowest Single-Day Viewing (Mins)",
+            min_value=0.0, max_value=60.0, value=float(st.session_state.min_daily_mins), step=2.0,
+            help="Minimum minutes watched on an active day"
         )
 
     st.markdown("<div style='height: 0.5rem;'></div>", unsafe_allow_html=True)
 
-    # 2. Services Subscribed
+    # 3. Disengagement & Friction Signals
     st.markdown("""
         <div class="card-title">
-            <span>🌐 Subscribed Services</span>
+            <span>⚠️ Inactivity & Support Friction Signals</span>
         </div>
     """, unsafe_allow_html=True)
     
-    s1, s2 = st.columns(2)
-    with s1:
-        internet_service = st.selectbox(
-            "Internet Service",
-            ["Fiber optic", "DSL", "No"],
-            index=["Fiber optic", "DSL", "No"].index(st.session_state.internet)
+    f1, f2 = st.columns(2)
+    with f1:
+        inactive_days = st.slider(
+            "Consecutive Days Inactive (Dormancy)",
+            min_value=0.0, max_value=25.0, value=float(st.session_state.inactive_days), step=1.0,
+            help="Maximum consecutive days without opening the streaming app"
         )
-        
-        has_internet = (internet_service != "No")
-        sec_opts = ["No", "Yes"] if has_internet else ["No internet service"]
-        
-        tech_support = st.selectbox(
-            "Tech Support Included",
-            sec_opts,
-            index=0 if st.session_state.tech_support == "No" or not has_internet else 1
-        )
-        online_security = st.selectbox(
-            "Online Security",
-            sec_opts,
-            index=0 if st.session_state.security == "No" or not has_internet else 1
+    with f2:
+        support_calls = st.slider(
+            "Customer Support Calls / Tickets Logged",
+            min_value=0, max_value=9, value=int(st.session_state.support_calls), step=1,
+            help="Complaints regarding buffering, billing issues, playback errors"
         )
 
-    with s2:
-        phone_service = st.selectbox(
-            "Phone Service",
-            ["Yes", "No"],
-            index=0 if st.session_state.phone == "Yes" else 1
-        )
-        online_backup = st.selectbox(
-            "Cloud Backup",
-            sec_opts,
-            index=0 if st.session_state.backup == "No" or not has_internet else 1
-        )
-        device_protection = st.selectbox(
-            "Device Protection",
-            sec_opts,
-            index=0 if st.session_state.device == "No" or not has_internet else 1
-        )
-
-    # Optional / Advanced Demographics Expander (Keeps UI clean!)
-    with st.expander("More Customer Details (Demographics & Streaming)"):
+    # Demographics Expander
+    with st.expander("Subscriber Demographics (Age & Gender)"):
         d1, d2 = st.columns(2)
         with d1:
-            senior = st.selectbox("Senior Citizen (65+)", ["No", "Yes"], index=0 if st.session_state.senior == "No" else 1)
-            partner = st.selectbox("Has Partner", ["No", "Yes"], index=0 if st.session_state.partner == "No" else 1)
-            dependents = st.selectbox("Has Dependents", ["No", "Yes"], index=0 if st.session_state.dependents == "No" else 1)
+            age = st.slider("Subscriber Age", min_value=18, max_value=80, value=int(st.session_state.age))
         with d2:
-            gender = st.selectbox("Gender", ["Female", "Male"], index=0)
-            multiple_lines = st.selectbox("Multiple Phone Lines", ["No", "Yes", "No phone service"] if phone_service == "Yes" else ["No phone service"])
-            streaming_tv = st.selectbox("Streaming TV", sec_opts)
-            streaming_movies = st.selectbox("Streaming Movies", sec_opts)
+            gender = st.selectbox("Gender", ["Female", "Male", "Unknown"], index=["Female", "Male", "Unknown"].index(st.session_state.gender))
 
 # -----------------------------
-# BUILD DATA PAYLOAD & PREDICT
+# BUILD OTT DATA PAYLOAD & PREDICT
 # -----------------------------
-account_data = {
+ott_payload = {
+    'age': age,
     'gender': gender,
-    'SeniorCitizen': 1 if senior == "Yes" else 0,
-    'Partner': partner,
-    'Dependents': dependents,
-    'tenure': tenure,
-    'PhoneService': phone_service,
-    'MultipleLines': multiple_lines,
-    'InternetService': internet_service,
-    'OnlineSecurity': online_security,
-    'OnlineBackup': online_backup,
-    'DeviceProtection': device_protection,
-    'TechSupport': tech_support,
-    'StreamingTV': streaming_tv,
-    'StreamingMovies': streaming_movies,
-    'Contract': contract,
-    'PaperlessBilling': paperless,
-    'PaymentMethod': payment_method,
-    'MonthlyCharges': monthly_charges,
-    'TotalCharges': total_charges
+    'no_of_days_subscribed': days_subscribed,
+    'multi_screen': multi_screen_val,
+    'mail_subscribed': mail_subscribed_val,
+    'weekly_mins_watched': float(weekly_mins),
+    'minimum_daily_mins': float(min_daily_mins),
+    'maximum_daily_mins': float(max_daily_mins),
+    'weekly_max_night_mins': int(night_mins),
+    'videos_watched': int(videos_watched),
+    'maximum_days_inactive': float(inactive_days),
+    'customer_support_calls': int(support_calls)
 }
 
-risk_score = compute_churn_risk(account_data)
-annual_revenue_at_risk = monthly_charges * 12.0
+churn_risk_pct = compute_ott_churn(ott_payload)
+annual_streaming_arr = monthly_fee * 12.0
 
-# Determine classification
-if risk_score >= 60.0:
+# Determine OTT risk category
+if churn_risk_pct >= 50.0:
     risk_style = "high"
     risk_badge = "badge-high"
     risk_title = "HIGH CHURN RISK"
-    summary_sentence = "This customer shows strong indicators of leaving. Immediate retention action is recommended."
-elif risk_score >= 35.0:
+    summary_sentence = "High probability of cancellation. Customer exhibits severe platform friction or content disengagement."
+elif churn_risk_pct >= 25.0:
     risk_style = "medium"
     risk_badge = "badge-medium"
-    risk_title = "MODERATE RISK"
-    summary_sentence = "This customer has several warning signs. Reviewing their plan could improve retention."
+    risk_title = "MODERATE WATCHLIST"
+    summary_sentence = "Moderate churn indicators detected. Re-engaging with new content drops or support outreach recommended."
 else:
     risk_style = "low"
     risk_badge = "badge-low"
-    risk_title = "LOW RISK (LOYAL)"
-    summary_sentence = "This customer is well-retained and satisfied based on their account history."
+    risk_title = "LOW RISK (LOYAL VIEWER)"
+    summary_sentence = "Active, satisfied subscriber with strong streaming habits and consistent platform retention."
 
 # -----------------------------
-# RIGHT COLUMN: CLEAR RESULTS
+# RIGHT COLUMN: RESULTS & RETENTION PLAYBOOK
 # -----------------------------
 with col_results:
     # 1. Main Risk Score Card
     st.markdown(f"""
     <div class="risk-score-box {risk_style}">
         <div class="risk-score-label">Predicted Churn Probability</div>
-        <div class="risk-score-number">{risk_score:.0f}%</div>
+        <div class="risk-score-number">{churn_risk_pct:.0f}%</div>
         <div class="risk-score-status {risk_badge}">{risk_title}</div>
         <div class="risk-score-summary">
             {summary_sentence}
@@ -610,17 +506,17 @@ with col_results:
     st.markdown(f"""
     <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem; margin-bottom: 1.25rem;">
         <div class="stat-pill">
-            <div class="stat-pill-label">Monthly Bill</div>
-            <div class="stat-pill-value">${monthly_charges:.2f}</div>
+            <div class="stat-pill-label">Subscription Tier</div>
+            <div class="stat-pill-value">${monthly_fee:.2f}<span style="font-size:0.85rem; font-weight:500; color:#94a3b8;">/mo</span></div>
         </div>
         <div class="stat-pill">
-            <div class="stat-pill-label">Annual Value at Risk</div>
-            <div class="stat-pill-value">${annual_revenue_at_risk:,.2f}</div>
+            <div class="stat-pill-label">Annual Value (ARR)</div>
+            <div class="stat-pill-value">${annual_streaming_arr:,.2f}</div>
         </div>
     </div>
     """, unsafe_allow_html=True)
 
-    # 3. Why is this customer at risk? (Plain English Drivers)
+    # 3. Why is this subscriber at risk? (Plain English OTT Drivers)
     st.markdown("""
         <div class="section-subtitle">
             🔍 Why this score?
@@ -628,23 +524,25 @@ with col_results:
     """, unsafe_allow_html=True)
 
     reasons = []
-    if contract == "Month-to-month":
-        reasons.append(("❌", "<strong>Month-to-month contract</strong> increases likelihood of leaving at any time."))
+    if support_calls >= 4:
+        reasons.append(("❌", f"<strong>High Support Escalations ({support_calls} calls)</strong>: Strong churn signal from buffering or playback complaints."))
+    elif support_calls <= 1:
+        reasons.append(("✅", f"<strong>Low Support Friction ({support_calls} tickets)</strong>: Smooth playback experience with zero open disputes."))
+
+    if inactive_days >= 8:
+        reasons.append(("❌", f"<strong>High App Inactivity ({int(inactive_days)} days inactive)</strong>: Subscriber has stopped streaming content."))
+    elif inactive_days <= 2:
+        reasons.append(("✅", f"<strong>Consistent Daily Habit ({int(inactive_days)} day inactive)</strong>: Strong daily engagement habit."))
+
+    if weekly_mins < 120:
+        reasons.append(("⚠️", f"<strong>Low Weekly Watch Time ({weekly_mins} mins)</strong>: Less than 2 hours streamed per week indicates low perceived value."))
+    elif weekly_mins >= 350:
+        reasons.append(("✅", f"<strong>Heavy Binge Engagement ({weekly_mins} mins)</strong>: High streaming volume indicates deep content consumption."))
+
+    if multi_screen_val == "no":
+        reasons.append(("ℹ️", "<strong>Single-Screen Subscription</strong>: Lacks multi-device household lock-in."))
     else:
-        reasons.append(("✅", f"<strong>Committed {contract.lower()} contract</strong> provides strong retention stability."))
-
-    if tenure <= 6:
-        reasons.append(("❌", f"<strong>New account ({tenure} months)</strong>: First 6 months carry the highest cancellation rate."))
-    elif tenure >= 24:
-        reasons.append(("✅", f"<strong>Long-term tenure ({tenure} months)</strong>: Established account with proven loyalty."))
-
-    if payment_method == "Electronic check":
-        reasons.append(("❌", "<strong>Manual payment via electronic check</strong> has much higher churn than auto-pay."))
-    elif "automatic" in payment_method:
-        reasons.append(("✅", "<strong>Automatic payment enabled</strong> reduces friction and missed payments."))
-
-    if internet_service == "Fiber optic" and tech_support == "No":
-        reasons.append(("⚠️", "<strong>High-speed Fiber without Tech Support</strong>: Vulnerable to unresolved technical issues."))
+        reasons.append(("ℹ️", "<strong>Multi-Screen Plan</strong>: Multi-device shared account."))
 
     for icon, text in reasons[:4]:
         st.markdown(f"""
@@ -656,57 +554,52 @@ with col_results:
 
     st.markdown("<div style='height: 0.5rem;'></div>", unsafe_allow_html=True)
 
-    # 4. Recommended Actions
+    # 4. Recommended OTT Retention Actions
     st.markdown("""
         <div class="section-subtitle">
-            💡 Recommended Actions to Retain Customer
+            💡 Recommended Actions to Retain Subscriber
         </div>
     """, unsafe_allow_html=True)
 
-    # Calculate concrete potential risk reductions
     actions = []
-    if contract == "Month-to-month":
-        sim_data = dict(account_data)
-        sim_data['Contract'] = 'One year'
-        new_prob = compute_churn_risk(sim_data)
-        reduction = max(1.0, risk_score - new_prob)
+    if support_calls >= 3:
+        sim = dict(ott_payload)
+        sim['customer_support_calls'] = 1
+        new_p = compute_ott_churn(sim)
+        reduction = max(2.0, churn_risk_pct - new_p)
         actions.append((
-            "Offer 1-Year Contract with Loyalty Perk",
-            "Transitioning from month-to-month to an annual agreement.",
+            "Priority Support Outreach & Goodwill Credit",
+            "Resolve streaming complaints and offer a one-time $5 credit to rebuild satisfaction.",
             f"-{reduction:.0f}% risk"
         ))
 
-    if payment_method == "Electronic check":
-        sim_data = dict(account_data)
-        sim_data['PaymentMethod'] = 'Bank transfer (automatic)'
-        new_prob = compute_churn_risk(sim_data)
-        reduction = max(1.0, risk_score - new_prob)
+    if inactive_days >= 5 or weekly_mins < 150:
+        sim = dict(ott_payload)
+        sim['maximum_days_inactive'] = 2.0
+        sim['weekly_mins_watched'] = 300.0
+        new_p = compute_ott_churn(sim)
+        reduction = max(2.0, churn_risk_pct - new_p)
         actions.append((
-            "Encourage Auto-Pay Enrollment",
-            "Offer a one-time $10 credit to set up automatic credit card or ACH payment.",
+            "Push Personalized New-Release Recommendations",
+            "Send targeted push notification featuring popular series in their preferred genres.",
             f"-{reduction:.0f}% risk"
         ))
 
-    if tech_support == "No" and internet_service != "No":
-        sim_data = dict(account_data)
-        sim_data['TechSupport'] = 'Yes'
-        sim_data['OnlineSecurity'] = 'Yes'
-        new_prob = compute_churn_risk(sim_data)
-        reduction = max(1.0, risk_score - new_prob)
+    if days_subscribed <= 60:
         actions.append((
-            "Add Complimentary Tech Support",
-            "Provide 6 months of free priority support and online security protection.",
-            f"-{reduction:.0f}% risk"
+            "Onboarding Re-engagement Campaign",
+            "Send curated 'What to Watch Next' email sequence to establish long-term viewing habits.",
+            "-10% risk"
         ))
 
     if not actions:
         actions.append((
-            "Maintain Standard Relationship Check-in",
-            "Customer is currently stable. Send routine satisfaction surveys.",
+            "Standard VIP Retention Track",
+            "Subscriber is highly satisfied and active. Deliver routine content previews.",
             "Healthy"
         ))
 
-    for title, desc, benefit in actions:
+    for title, desc, benefit in actions[:3]:
         st.markdown(f"""
         <div class="action-item">
             <div class="action-header">
@@ -720,29 +613,122 @@ with col_results:
     # 5. Professional Report Export Options
     st.markdown("<div style='height: 0.5rem;'></div>", unsafe_allow_html=True)
     
-    excel_csv_content = generate_excel_csv_report(
-        account_data, risk_score, risk_title, reasons, actions, annual_revenue_at_risk
-    )
-    html_dossier_content = generate_html_dossier_report(
-        account_data, risk_score, risk_title, reasons, actions, annual_revenue_at_risk
-    )
-    
+    # Generate OTT CSV Report
+    def generate_ott_csv():
+        lines = [
+            "STREAMING SUBSCRIBER CHURN & RETENTION ASSESSMENT REPORT",
+            f"Generated Date,'{datetime.now().strftime('%Y-%m-%d %H:%M:%S UTC')}",
+            "Platform,StreamPulse OTT Retention Engine",
+            "",
+            "1. EXECUTIVE SUBSCRIBER RISK SUMMARY",
+            "Metric,Subscriber Metric,Assessment",
+            f"Predicted Churn Probability,{churn_risk_pct:.1f}%,{risk_title}",
+            f"Monthly Subscription Fee,${monthly_fee:.2f},Active Tier",
+            f"Annual Revenue at Risk (ARR),${annual_streaming_arr:,.2f},Exposure",
+            f"Tenure with Platform,{days_subscribed} Days,Account Age",
+            "",
+            "2. STREAMING BEHAVIOR & ENGAGEMENT",
+            "Behavioral Metric,Logged Metric",
+            f"Weekly Minutes Streamed,{weekly_mins} Minutes",
+            f"Shows & Movies Streamed / Week,{videos_watched}",
+            f"Peak Single-Day Watch Time,{max_daily_mins} Minutes",
+            f"Night Streaming Volume,{night_mins} Minutes",
+            f"Max Consecutive Inactive Days,{inactive_days} Days",
+            f"Customer Support Complaints Logged,{support_calls}",
+            f"Multi-Screen Tier,{multi_screen}",
+            "",
+            "3. KEY RISK DRIVERS (WHY THIS SCORE?)",
+            "Indicator,Impact Factor,Details",
+        ]
+        for icon, text in reasons:
+            clean = text.replace('<strong>', '').replace('</strong>', '')
+            tag = "Adverse Signal" if "❌" in icon else ("Favorable" if "✅" in icon else "Attention Area")
+            lines.append(f"{tag},Viewing Behavior,\"{clean}\"")
+        lines.extend([
+            "",
+            "4. RECOMMENDED RETENTION PLAYBOOK",
+            "Retention Strategy,Details,Projected Churn Delta"
+        ])
+        for title, desc, benefit in actions:
+            lines.append(f"\"{title}\",\"{desc}\",\"{benefit}\"")
+        return "\n".join(lines)
+
+    def generate_ott_html():
+        badge_bg = "#dc2626" if "HIGH" in risk_title else ("#d97706" if "MODERATE" in risk_title else "#059669")
+        drivers_html = "".join([
+            f"""<tr><td style='padding:8px 12px; border-bottom:1px solid #e2e8f0; font-weight:600;'>{icon}</td>
+            <td style='padding:8px 12px; border-bottom:1px solid #e2e8f0;'>{text}</td></tr>""" for icon, text in reasons
+        ])
+        actions_html = "".join([
+            f"""<div style='background:#f8fafc; border-left:4px solid #2563eb; padding:12px 16px; margin-bottom:10px; border-radius:4px;'>
+                <div style='display:flex; justify-content:space-between; font-weight:700; color:#0f172a;'>
+                    <span>{title}</span><span style='color:#059669; font-weight:700;'>{benefit}</span>
+                </div>
+                <div style='font-size:13px; color:#64748b; margin-top:4px;'>{desc}</div>
+            </div>""" for title, desc, benefit in actions
+        ])
+        return f"""<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>StreamPulse OTT Churn Report</title>
+    <style>
+        body {{ font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; margin: 30px auto; max-width: 850px; color: #1e293b; background: #f8fafc; }}
+        .card {{ background: #ffffff; border: 1px solid #e2e8f0; border-radius: 12px; padding: 32px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05); }}
+        .header {{ border-bottom: 2px solid #2563eb; padding-bottom: 16px; margin-bottom: 24px; display: flex; justify-content: space-between; align-items: flex-end; }}
+        .title {{ font-size: 24px; font-weight: 800; color: #0f172a; margin: 0; }}
+        .kpi-grid {{ display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-bottom: 24px; }}
+        .kpi-box {{ background: #f8fafc; border-radius: 8px; padding: 16px; border: 1px solid #e2e8f0; text-align: center; }}
+        .badge {{ display: inline-block; padding: 4px 12px; border-radius: 9999px; font-size: 12px; font-weight: 700; color: #ffffff; background: {badge_bg}; }}
+        .section-title {{ font-size: 16px; font-weight: 700; color: #0f172a; border-bottom: 1px solid #e2e8f0; padding-bottom: 8px; margin-top: 24px; margin-bottom: 12px; }}
+        table {{ width: 100%; border-collapse: collapse; font-size: 14px; margin-bottom: 16px; }}
+        th {{ text-align: left; background: #f1f5f9; padding: 8px 12px; border-bottom: 1px solid #cbd5e1; font-weight: 600; color: #475569; }}
+        td {{ padding: 8px 12px; border-bottom: 1px solid #f1f5f9; color: #334155; }}
+        @media print {{ body {{ background: #ffffff; margin: 0; }} .card {{ border: none; box-shadow: none; padding: 0; }} }}
+    </style>
+</head>
+<body>
+    <div class="card">
+        <div class="header">
+            <div>
+                <h1 class="title">🎬 StreamPulse™ Subscriber Churn Dossier</h1>
+                <div style="font-size:13px; color:#64748b; margin-top:4px;">OTT Retention Intelligence &bull; Date: {datetime.now().strftime('%B %d, %Y')}</div>
+            </div>
+            <div><span class="badge">{risk_title}</span></div>
+        </div>
+        <div class="kpi-grid">
+            <div class="kpi-box"><div style="font-size:11px; font-weight:700; color:#64748b; text-transform:uppercase;">Predicted Churn Risk</div><div style="font-size:28px; font-weight:800; color:#0f172a;">{churn_risk_pct:.1f}%</div></div>
+            <div class="kpi-box"><div style="font-size:11px; font-weight:700; color:#64748b; text-transform:uppercase;">Monthly Subscription</div><div style="font-size:28px; font-weight:800; color:#0f172a;">${monthly_fee:.2f}</div></div>
+            <div class="kpi-box"><div style="font-size:11px; font-weight:700; color:#64748b; text-transform:uppercase;">Annual Revenue at Risk</div><div style="font-size:28px; font-weight:800; color:#0f172a;">${annual_streaming_arr:,.2f}</div></div>
+        </div>
+        <div class="section-title">Streaming &amp; Behavioral Profile</div>
+        <table>
+            <tr><th>Account Age</th><td>{days_subscribed} Days</td><th>Plan Type</th><td>{multi_screen}</td></tr>
+            <tr><th>Weekly Watch Time</th><td>{weekly_mins} Mins</td><th>Shows / Movies Watched</th><td>{videos_watched}</td></tr>
+            <tr><th>Consecutive Inactive Days</th><td>{inactive_days} Days</td><th>Customer Support Calls</th><td>{support_calls}</td></tr>
+        </table>
+        <div class="section-title">Key Risk Drivers</div>
+        <table>{drivers_html}</table>
+        <div class="section-title">Recommended Retention Playbook</div>
+        {actions_html}
+    </div>
+</body>
+</html>"""
+
     export_col1, export_col2 = st.columns(2)
     with export_col1:
         st.download_button(
             label="📑 Export for Excel (.csv)",
-            data=excel_csv_content,
-            file_name=f"Retention_Report_{datetime.now().strftime('%Y%m%d_%H%M')}.csv",
+            data=generate_ott_csv(),
+            file_name=f"OTT_Retention_Report_{datetime.now().strftime('%Y%m%d_%H%M')}.csv",
             mime="text/csv",
-            use_container_width=True,
-            help="Download a structured, multi-section report formatted specifically for Excel"
+            use_container_width=True
         )
     with export_col2:
         st.download_button(
             label="📊 Export Printable Dossier (.html)",
-            data=html_dossier_content,
-            file_name=f"Retention_Executive_Dossier_{datetime.now().strftime('%Y%m%d_%H%M')}.html",
+            data=generate_ott_html(),
+            file_name=f"OTT_Executive_Dossier_{datetime.now().strftime('%Y%m%d_%H%M')}.html",
             mime="text/html",
-            use_container_width=True,
-            help="Download an executive-grade, printable visual report ready for PDF printing"
+            use_container_width=True
         )
