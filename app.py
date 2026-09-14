@@ -20,7 +20,6 @@ st.set_page_config(
 # -----------------------------------------------------------------------------
 # 2. HIGH-CONTRAST, THEME-SAFE, INTUITIVE CSS
 # -----------------------------------------------------------------------------
-# Fully compatible with Dark Mode and Light Mode with high-contrast text and crisp headers.
 st.markdown("""
 <style>
     @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Inter:wght@400;500;600&display=swap');
@@ -253,88 +252,157 @@ def compute_churn_risk(data):
     return float(prob)
 
 # -----------------------------------------------------------------------------
-# 5. PRESETS MANAGEMENT (Simple & Intuitive)
+# 5. REPORT GENERATION ENGINES (EXCEL & HTML)
 # -----------------------------------------------------------------------------
-# Initialize session state for clean defaults
-if 'preset' not in st.session_state:
-    st.session_state.preset = "Custom"
-    st.session_state.tenure = 12
-    st.session_state.contract = "Month-to-month"
-    st.session_state.payment = "Electronic check"
-    st.session_state.monthly = 75.0
-    st.session_state.total = 900.0
-    st.session_state.internet = "Fiber optic"
-    st.session_state.tech_support = "No"
-    st.session_state.security = "No"
-    st.session_state.backup = "No"
-    st.session_state.device = "No"
-    st.session_state.streaming_tv = "No"
-    st.session_state.streaming_movies = "No"
-    st.session_state.phone = "Yes"
-    st.session_state.multiple = "No"
-    st.session_state.senior = "No"
-    st.session_state.partner = "No"
-    st.session_state.dependents = "No"
-    st.session_state.paperless = "Yes"
+def generate_excel_csv_report(account_data, risk_score, risk_title, reasons, actions, annual_arr):
+    """
+    Generates a structured, multi-section CSV report that opens cleanly in Excel
+    without clipped columns, truncated headers, or ### date errors.
+    """
+    lines = [
+        "CUSTOMER CHURN RISK & RETENTION ASSESSMENT REPORT",
+        f"Generated Date,'{datetime.now().strftime('%Y-%m-%d %H:%M:%S UTC')}",
+        "Assessment Engine,Random Forest Production Classifier",
+        "",
+        "1. EXECUTIVE RISK ASSESSMENT",
+        "Metric,Customer Value,Assessment Summary",
+        f"Predicted Churn Probability,{risk_score:.1f}%,{risk_title}",
+        f"Monthly Recurring Bill,${account_data['MonthlyCharges']:.2f},Active Monthly Run-Rate",
+        f"Annual Revenue at Risk (ARR),${annual_arr:,.2f},Financial Exposure if Cancelled",
+        f"Customer Tenancy,{account_data['tenure']} Months,Account Age",
+        "",
+        "2. ACCOUNT & SERVICE CONFIGURATION",
+        "Account Feature,Current Value",
+        f"Contract Type,{account_data['Contract']}",
+        f"Payment Method,{account_data['PaymentMethod']}",
+        f"Paperless Invoicing,{account_data['PaperlessBilling']}",
+        f"Internet Service Tier,{account_data['InternetService']}",
+        f"Tech Support Included,{account_data['TechSupport']}",
+        f"Cyber Security Attached,{account_data['OnlineSecurity']}",
+        f"Automated Cloud Backup,{account_data['OnlineBackup']}",
+        f"Device Protection,{account_data['DeviceProtection']}",
+        f"Telephony Service,{account_data['PhoneService']}",
+        f"Multiple Lines,{account_data['MultipleLines']}",
+        f"Cumulative Invoiced to Date,${account_data['TotalCharges']:.2f}",
+        "",
+        "3. IDENTIFIED RISK DRIVERS (WHY THIS SCORE?)",
+        "Status,Factor Attribution,Description",
+    ]
+    
+    for icon, text in reasons:
+        clean_text = text.replace('<strong>', '').replace('</strong>', '')
+        indicator = "Adverse (Risk Factor)" if "❌" in icon else ("Favorable (Retention Anchor)" if "✅" in icon else "Attention Area")
+        lines.append(f"{indicator},Account Signal,\"{clean_text}\"")
+        
+    lines.extend([
+        "",
+        "4. RECOMMENDED RETENTION ACTION PLAN",
+        "Recommended Intervention,Implementation Details,Projected Churn Reduction"
+    ])
+    
+    for title, desc, benefit in actions:
+        lines.append(f"\"{title}\",\"{desc}\",\"{benefit}\"")
+        
+    return "\n".join(lines)
 
-def apply_preset(name):
-    if name == "high_risk":
-        st.session_state.tenure = 2
-        st.session_state.contract = "Month-to-month"
-        st.session_state.payment = "Electronic check"
-        st.session_state.monthly = 95.0
-        st.session_state.total = 190.0
-        st.session_state.internet = "Fiber optic"
-        st.session_state.tech_support = "No"
-        st.session_state.security = "No"
-        st.session_state.backup = "No"
-        st.session_state.device = "No"
-        st.session_state.streaming_tv = "Yes"
-        st.session_state.streaming_movies = "Yes"
-        st.session_state.phone = "Yes"
-        st.session_state.multiple = "No"
-        st.session_state.senior = "No"
-        st.session_state.partner = "No"
-        st.session_state.dependents = "No"
-        st.session_state.paperless = "Yes"
-    elif name == "loyal":
-        st.session_state.tenure = 60
-        st.session_state.contract = "Two year"
-        st.session_state.payment = "Credit card (automatic)"
-        st.session_state.monthly = 55.0
-        st.session_state.total = 3300.0
-        st.session_state.internet = "DSL"
-        st.session_state.tech_support = "Yes"
-        st.session_state.security = "Yes"
-        st.session_state.backup = "Yes"
-        st.session_state.device = "Yes"
-        st.session_state.streaming_tv = "No"
-        st.session_state.streaming_movies = "No"
-        st.session_state.phone = "Yes"
-        st.session_state.multiple = "Yes"
-        st.session_state.senior = "No"
-        st.session_state.partner = "Yes"
-        st.session_state.dependents = "Yes"
-        st.session_state.paperless = "No"
-    elif name == "average":
-        st.session_state.tenure = 18
-        st.session_state.contract = "One year"
-        st.session_state.payment = "Bank transfer (automatic)"
-        st.session_state.monthly = 65.0
-        st.session_state.total = 1170.0
-        st.session_state.internet = "DSL"
-        st.session_state.tech_support = "No"
-        st.session_state.security = "Yes"
-        st.session_state.backup = "No"
-        st.session_state.device = "No"
-        st.session_state.streaming_tv = "No"
-        st.session_state.streaming_movies = "No"
-        st.session_state.phone = "Yes"
-        st.session_state.multiple = "No"
-        st.session_state.senior = "No"
-        st.session_state.partner = "Yes"
-        st.session_state.dependents = "No"
-        st.session_state.paperless = "Yes"
+def generate_html_dossier_report(account_data, risk_score, risk_title, reasons, actions, annual_arr):
+    """
+    Generates an executive-grade, printable HTML document with clean styling,
+    ready to save, open in browser, or print to PDF.
+    """
+    badge_bg = "#dc2626" if "HIGH" in risk_title else ("#d97706" if "MODERATE" in risk_title else "#059669")
+    
+    drivers_html = "".join([
+        f"""<tr>
+            <td style='padding:8px 12px; border-bottom:1px solid #e2e8f0; font-weight:600;'>{icon}</td>
+            <td style='padding:8px 12px; border-bottom:1px solid #e2e8f0;'>{text}</td>
+        </tr>""" for icon, text in reasons
+    ])
+    
+    actions_html = "".join([
+        f"""<div style='background:#f8fafc; border-left:4px solid #2563eb; padding:12px 16px; margin-bottom:10px; border-radius:4px;'>
+            <div style='display:flex; justify-content:space-between; font-weight:700; color:#0f172a;'>
+                <span>{title}</span>
+                <span style='color:#059669; font-weight:700;'>{benefit}</span>
+            </div>
+            <div style='font-size:13px; color:#64748b; margin-top:4px;'>{desc}</div>
+        </div>""" for title, desc, benefit in actions
+    ])
+
+    html_content = f"""<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>Customer Churn Risk Report</title>
+    <style>
+        body {{ font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; margin: 30px auto; max-width: 850px; color: #1e293b; background: #f8fafc; }}
+        .card {{ background: #ffffff; border: 1px solid #e2e8f0; border-radius: 12px; padding: 32px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05); }}
+        .header {{ border-bottom: 2px solid #2563eb; padding-bottom: 16px; margin-bottom: 24px; display: flex; justify-content: space-between; align-items: flex-end; }}
+        .title {{ font-size: 24px; font-weight: 800; color: #0f172a; margin: 0; }}
+        .subtitle {{ font-size: 13px; color: #64748b; margin-top: 4px; }}
+        .kpi-grid {{ display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-bottom: 24px; }}
+        .kpi-box {{ background: #f8fafc; border-radius: 8px; padding: 16px; border: 1px solid #e2e8f0; text-align: center; }}
+        .kpi-label {{ font-size: 11px; font-weight: 700; color: #64748b; text-transform: uppercase; letter-spacing: 0.05em; }}
+        .kpi-value {{ font-size: 28px; font-weight: 800; color: #0f172a; margin-top: 4px; }}
+        .badge {{ display: inline-block; padding: 4px 12px; border-radius: 9999px; font-size: 12px; font-weight: 700; color: #ffffff; background: {badge_bg}; }}
+        .section-title {{ font-size: 16px; font-weight: 700; color: #0f172a; border-bottom: 1px solid #e2e8f0; padding-bottom: 8px; margin-top: 24px; margin-bottom: 12px; }}
+        table {{ width: 100%; border-collapse: collapse; font-size: 14px; margin-bottom: 16px; }}
+        th {{ text-align: left; background: #f1f5f9; padding: 8px 12px; border-bottom: 1px solid #cbd5e1; font-weight: 600; color: #475569; }}
+        td {{ padding: 8px 12px; border-bottom: 1px solid #f1f5f9; color: #334155; }}
+        @media print {{ body {{ background: #ffffff; margin: 0; }} .card {{ border: none; box-shadow: none; padding: 0; }} }}
+    </style>
+</head>
+<body>
+    <div class="card">
+        <div class="header">
+            <div>
+                <h1 class="title">Customer Churn Risk Report</h1>
+                <div class="subtitle">Executive Retention Dossier & Action Playbook &bull; Date: {datetime.now().strftime('%B %d, %Y')}</div>
+            </div>
+            <div>
+                <span class="badge">{risk_title}</span>
+            </div>
+        </div>
+
+        <div class="kpi-grid">
+            <div class="kpi-box">
+                <div class="kpi-label">Predicted Churn Risk</div>
+                <div class="kpi-value">{risk_score:.1f}%</div>
+            </div>
+            <div class="kpi-box">
+                <div class="kpi-label">Monthly Bill</div>
+                <div class="kpi-value">${account_data['MonthlyCharges']:.2f}</div>
+            </div>
+            <div class="kpi-box">
+                <div class="kpi-label">Annual Revenue at Risk</div>
+                <div class="kpi-value">${annual_arr:,.2f}</div>
+            </div>
+        </div>
+
+        <div class="section-title">Account &amp; Service Profile</div>
+        <table>
+            <tr><th>Contract Term</th><td>{account_data['Contract']}</td><th>Account Tenancy</th><td>{account_data['tenure']} Months</td></tr>
+            <tr><th>Payment Method</th><td>{account_data['PaymentMethod']}</td><th>Paperless Invoicing</th><td>{account_data['PaperlessBilling']}</td></tr>
+            <tr><th>Internet Service</th><td>{account_data['InternetService']}</td><th>Tech Support</th><td>{account_data['TechSupport']}</td></tr>
+            <tr><th>Online Security</th><td>{account_data['OnlineSecurity']}</td><th>Cloud Backup</th><td>{account_data['OnlineBackup']}</td></tr>
+        </table>
+
+        <div class="section-title">Key Risk Drivers</div>
+        <table>
+            {drivers_html}
+        </table>
+
+        <div class="section-title">Recommended Retention Actions</div>
+        {actions_html}
+
+        <div style="margin-top: 30px; padding-top: 15px; border-top: 1px solid #e2e8f0; font-size: 11px; color: #94a3b8; display: flex; justify-content: space-between;">
+            <span>Generated by RetainOps Customer Risk Engine</span>
+            <span>Confidential &bull; For Internal Retention Operations</span>
+        </div>
+    </div>
+</body>
+</html>"""
+    return html_content
 
 # -----------------------------------------------------------------------------
 # 6. HEADER & QUICK PRESET BUTTONS
@@ -649,22 +717,32 @@ with col_results:
         </div>
         """, unsafe_allow_html=True)
 
-    # 5. Quick Export Button
-    export_df = pd.DataFrame([{
-        "Customer_Tenure_Months": tenure,
-        "Contract": contract,
-        "Monthly_Charges": monthly_charges,
-        "Annual_Value_At_Risk": annual_revenue_at_risk,
-        "Churn_Probability_Pct": round(risk_score, 1),
-        "Risk_Category": risk_title,
-        "Export_Date": datetime.now().strftime("%Y-%m-%d %H:%M")
-    }])
-    csv_str = export_df.to_csv(index=False)
+    # 5. Professional Report Export Options
+    st.markdown("<div style='height: 0.5rem;'></div>", unsafe_allow_html=True)
     
-    st.download_button(
-        label="📄 Download Assessment Summary (CSV)",
-        data=csv_str,
-        file_name="churn_risk_summary.csv",
-        mime="text/csv",
-        use_container_width=True
+    excel_csv_content = generate_excel_csv_report(
+        account_data, risk_score, risk_title, reasons, actions, annual_revenue_at_risk
     )
+    html_dossier_content = generate_html_dossier_report(
+        account_data, risk_score, risk_title, reasons, actions, annual_revenue_at_risk
+    )
+    
+    export_col1, export_col2 = st.columns(2)
+    with export_col1:
+        st.download_button(
+            label="📑 Export for Excel (.csv)",
+            data=excel_csv_content,
+            file_name=f"Retention_Report_{datetime.now().strftime('%Y%m%d_%H%M')}.csv",
+            mime="text/csv",
+            use_container_width=True,
+            help="Download a structured, multi-section report formatted specifically for Excel"
+        )
+    with export_col2:
+        st.download_button(
+            label="📊 Export Printable Dossier (.html)",
+            data=html_dossier_content,
+            file_name=f"Retention_Executive_Dossier_{datetime.now().strftime('%Y%m%d_%H%M')}.html",
+            mime="text/html",
+            use_container_width=True,
+            help="Download an executive-grade, printable visual report ready for PDF printing"
+        )
