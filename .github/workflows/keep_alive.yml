@@ -1,0 +1,17 @@
+name: Keep Streamlit App Awake
+
+on:
+  schedule:
+    # Runs twice a day at 06:00 and 18:00 UTC to guarantee the app never sleeps
+    - cron: '0 6,18 * * *'
+  workflow_dispatch: # Allows manual trigger anytime from the GitHub Actions tab
+
+jobs:
+  ping:
+    name: Ping Streamlit Web App
+    runs-on: ubuntu-latest
+    steps:
+      - name: Send HTTP Request to Streamlit
+        run: |
+          HTTP_STATUS=$(curl -s -o /dev/null -w "%{http_code}" -L "https://customer-churn-risk-analyzer.streamlit.app/")
+          echo "Streamlit App responded with HTTP status code: $HTTP_STATUS at $(date)"
