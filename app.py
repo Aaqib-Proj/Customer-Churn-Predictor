@@ -449,6 +449,12 @@ def apply_ott_preset(name):
 # -----------------------------------------------------------------------------
 st.markdown("""
 <div class="app-header">
+    <div style="display: flex; align-items: center; gap: 0.65rem; margin-bottom: 0.35rem;">
+        <span style="font-size: 1.85rem; line-height: 1;">🎬</span>
+        <h1 style="font-size: 1.85rem; font-weight: 800; color: #0f172a; margin: 0; letter-spacing: -0.025em; line-height: 1.2;">
+            StreamPulse™ <span style="font-size: 1.2rem; font-weight: 600; color: #64748b;">| OTT Subscriber Churn Analyzer</span>
+        </h1>
+    </div>
     <p class="app-subtitle">
         Predict subscriber cancellation risk for streaming services (Netflix, Prime, Disney+), detect viewer disengagement, and trigger automated retention offers.
     </p>
